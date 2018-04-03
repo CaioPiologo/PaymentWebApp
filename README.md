@@ -23,7 +23,9 @@ npm start
 ```
 It should be accessible at [localhost:5000](http://localhost:5000) and in the current exemple, accessing [localhost:5000/api/hello](http://localhost:5000/api/hello) should return a body.
 
-If running with the React client, it can be executed by uncommenting line 8 at [server.js](https://github.com/CaioPiologo/PaymentWebApp/blob/master/server.js) and then running `npm start` at root folder.
+## Deploying
 
-Or by having a terminal run the `npm start` command at root folder and another terminal window running `npm start` inside the client folder.
-
+In order to deploy on Heroku server with the React client, we need to uncomment line 8 at [server.js](https://github.com/CaioPiologo/PaymentWebApp/blob/master/server.js) and then pushing to `heroku master` if already created.
+```
+git push heroku master
+```
