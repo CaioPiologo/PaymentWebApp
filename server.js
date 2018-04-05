@@ -11,4 +11,15 @@ app.get('/api/hello', (req, res) => {
   res.send({ express: 'Hello World' });
 });
 
+app.post('/payments/creditCard', (req, res) => {
+   //receive stuff from require (req)
+   var name = req.param('name');
+
+
+   //do stuff with it (buy with some api)
+
+   //then return any response if needed
+   res.send({card_name: name});
+});
+
 app.listen(port, () => console.log(`Listening on port ${port}`));
