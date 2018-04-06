@@ -42,6 +42,7 @@ app.post('/payments/creditCard', (req, res) => {
 
   var result = 'AUTHORIZED'
   var reason = null
+  var opHash = null
   var responseCode = 200
 
   if (!clientInfo.hasOwnProperty('clientCardName') ||
@@ -60,11 +61,13 @@ app.post('/payments/creditCard', (req, res) => {
   } else if (clientInfo.cardNumber.toString().length !== 16) {
     result = 'UNAUTHORIZED'
     reason = 'Wrong card number.'
+  } else {
+    opHash = Math.random().toString(36).substring(2)
   }
 
   // then return any response if needed
   res.status(responseCode).send({
-    operationHash: Math.random().toString(36).substring(2),
+    operationHash: opHash,
     result: result,
     reason: reason
   });
@@ -103,7 +106,7 @@ app.post('/payments/bankTicket', (req, res) => {
   var clientInfo = req.body
   console.log(clientInfo)
 
-  var documentPath = null
+  var code = null
   var reason = null
   var responseCode = 200
 
@@ -118,19 +121,16 @@ app.post('/payments/bankTicket', (req, res) => {
   } else if (clientInfo.cep.toString().length !== 8) {
     reason = 'Wrong CEP.'
   } else {
-    documentPath = '/payments/bankTicket/' + Math.random().toString(36).substring(2)
+    code = Math.random().toString(36).substring(2)
   }
 
-  res.status(responseCode).send({
-    documentPath: documentPath,
-    reason: reason
-  })
-})
+  // TODO: Generate document and add it status to the DB
 
-app.get('/payments/bankTicket/:code', (req, res) => {
-  console.log(req.params.code)
-  // TODO: send document
-  res.status(200).send()
+  res.status(responseCode).send({
+    code: code,
+    reason: reason,
+    documentRep: ''
+  })
 })
 
 app.get('/payments/bankTicket/:code/status', (req, res) => {
@@ -138,6 +138,8 @@ app.get('/payments/bankTicket/:code/status', (req, res) => {
 
   var status = ''
   var responseCode = 200
+
+  // TODO: Check the status
   var ticketStatusFromAPI = Math.floor(Math.random() * 4) + 1
 
   console.log(ticketStatusFromAPI)
