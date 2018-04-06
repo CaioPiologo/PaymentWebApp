@@ -197,7 +197,7 @@ app.post('/invoice', (req, res) => {
     code = Math.random().toString(36).substring(2)
   }
 
-  // TODO: Generate document and add it status to the DB
+  // TODO: Generate invoice document
 
   res.status(responseCode).send({
     invoiceCode: code,
