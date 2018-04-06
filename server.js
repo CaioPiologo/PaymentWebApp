@@ -24,18 +24,6 @@ app.get('/api/hello', (req, res) => {
    res.send({ express: 'Hello World' });
 });
 
-app.post('/payments/creditCard', (req, res) => {
-   //receive stuff from require (req)
-   var name = req.body.name;
-   console.log(name);
-
-
-   //do stuff with it (buy with some api)
-
-   //then return any response if needed
-   res.statusCode(200).send({card_name: name});
-});
-
 app.post('/quotes', (req, res) => {
 
    db.collection('quotes').save(req.body, (err, result) => {
@@ -46,12 +34,48 @@ app.post('/quotes', (req, res) => {
    })
 })
 
-// app.listen(port, () => console.log(`Listening on port ${port}`));
+/// Check the informations, (in the future contact the credit module) and return the payment status
+app.post('/payments/creditCard', (req, res) => {
+  // receive stuff from require (req)
+  var clientInfo = req.body
+  console.log(clientInfo)
+
+  var result = 'AUTHORIZED'
+  var reason = null
+  var responseCode = 200
+
+  if (!clientInfo.hasOwnProperty('clientCardName') ||
+      !clientInfo.hasOwnProperty('cpf') ||
+      !clientInfo.hasOwnProperty('cardNumber') ||
+      !clientInfo.hasOwnProperty('month') ||
+      !clientInfo.hasOwnProperty('year') ||
+      !clientInfo.hasOwnProperty('securityCode') ||
+      !clientInfo.hasOwnProperty('value') ||
+      !clientInfo.hasOwnProperty('instalments')) {
+    result = 'UNAUTHORIZED'
+    reason = 'Missing information.'
+  } else if (clientInfo.cpf.toString().length !== 11) {
+    result = 'UNAUTHORIZED'
+    reason = 'Wrong CPF.'
+  } else if (clientInfo.cardNumber.toString().length !== 16) {
+    result = 'UNAUTHORIZED'
+    reason = 'Wrong card number.'
+  }
+
+  // then return any response if needed
+  res.status(responseCode).send({
+    operationHash: Math.random().toString(36).substring(2),
+    result: result,
+    reason: reason
+  });
+});
+
 /// Return the possible instalments values given the card flag.
-app.post('/payments/creditCards/installments', (req, res) => {
+app.post('/payments/creditCard/installments', (req, res) => {
   var value = parseInt(req.body.value)
   var flag = req.body.cardFlag
   var nOfInstalments = 1
+  var responseCode = 200
 
   switch (flag) {
     case 'MASTER_CARD':
@@ -72,7 +96,33 @@ app.post('/payments/creditCards/installments', (req, res) => {
   }
 
   // then return any response if needed
-  res.status(200).send({installments: installments})
+  res.status(responseCode).send({installments: installments})
 })
 
-app.listen(port, () => console.log(`Listening on port ${port}`));
+app.post('/payments/bankTicket', (req, res) => {
+  var clientInfo = req.body
+  console.log(clientInfo)
+
+  var documentPath = null
+  var reason = null
+  var responseCode = 200
+
+  if (!clientInfo.hasOwnProperty('clientName') ||
+      !clientInfo.hasOwnProperty('cpf') ||
+      !clientInfo.hasOwnProperty('address') ||
+      !clientInfo.hasOwnProperty('cep') ||
+      !clientInfo.hasOwnProperty('value')) {
+    reason = 'Missing information.'
+  } else if (clientInfo.cpf.toString().length !== 11) {
+    reason = 'Wrong CPF.'
+  } else if (clientInfo.cep.toString().length !== 8) {
+    reason = 'Wrong CEP.'
+  } else {
+    documentPath = '/payments/bankTicket/' + Math.random().toString(36).substring(2)
+  }
+
+  res.status(responseCode).send({
+    documentPath: documentPath,
+    reason: reason
+  })
+})
