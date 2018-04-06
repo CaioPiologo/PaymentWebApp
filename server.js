@@ -41,7 +41,7 @@ app.post('/payments/creditCard', (req, res) => {
   console.log(clientInfo)
 
   var result = 'AUTHORIZED'
-  var reason = null
+  var errorMessage = null
   var opHash = null
   var responseCode = 200
 
@@ -54,13 +54,13 @@ app.post('/payments/creditCard', (req, res) => {
       !clientInfo.hasOwnProperty('value') ||
       !clientInfo.hasOwnProperty('instalments')) {
     result = 'UNAUTHORIZED'
-    reason = 'Missing information.'
+    errorMessage = 'Missing information.'
   } else if (clientInfo.cpf.toString().length !== 11) {
     result = 'UNAUTHORIZED'
-    reason = 'Wrong CPF.'
+    errorMessage = 'Wrong CPF.'
   } else if (clientInfo.cardNumber.toString().length !== 16) {
     result = 'UNAUTHORIZED'
-    reason = 'Wrong card number.'
+    errorMessage = 'Wrong card number.'
   } else {
     opHash = Math.random().toString(36).substring(2)
   }
@@ -69,7 +69,7 @@ app.post('/payments/creditCard', (req, res) => {
   res.status(responseCode).send({
     operationHash: opHash,
     result: result,
-    reason: reason
+    errorMessage: errorMessage
   });
 });
 
@@ -107,7 +107,7 @@ app.post('/payments/bankTicket', (req, res) => {
   console.log(clientInfo)
 
   var code = null
-  var reason = null
+  var errorMessage = null
   var responseCode = 200
 
   if (!clientInfo.hasOwnProperty('clientName') ||
@@ -115,11 +115,11 @@ app.post('/payments/bankTicket', (req, res) => {
       !clientInfo.hasOwnProperty('address') ||
       !clientInfo.hasOwnProperty('cep') ||
       !clientInfo.hasOwnProperty('value')) {
-    reason = 'Missing information.'
+    errorMessage = 'Missing information.'
   } else if (clientInfo.cpf.toString().length !== 11) {
-    reason = 'Wrong CPF.'
+    errorMessage = 'Wrong CPF.'
   } else if (clientInfo.cep.toString().length !== 8) {
-    reason = 'Wrong CEP.'
+    errorMessage = 'Wrong CEP.'
   } else {
     code = Math.random().toString(36).substring(2)
   }
@@ -128,7 +128,7 @@ app.post('/payments/bankTicket', (req, res) => {
 
   res.status(responseCode).send({
     code: code,
-    reason: reason,
+    errorMessage: errorMessage,
     documentRep: ''
   })
 })
