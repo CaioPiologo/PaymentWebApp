@@ -126,3 +126,39 @@ app.post('/payments/bankTicket', (req, res) => {
     reason: reason
   })
 })
+
+app.get('/payments/bankTicket/:code', (req, res) => {
+  console.log(req.params.code)
+  // TODO: send document
+  res.status(200).send()
+})
+
+app.get('/payments/bankTicket/:code/status', (req, res) => {
+  console.log(req.params.code)
+
+  var status = ''
+  var responseCode = 200
+  var ticketStatusFromAPI = Math.floor(Math.random() * 4) + 1
+
+  console.log(ticketStatusFromAPI)
+
+  switch (ticketStatusFromAPI) {
+    case 1:
+      status = 'PENDING_PAYMENT'
+      break
+    case 2:
+      status = 'EXPIRED'
+      break
+    case 3:
+      status = 'OK'
+      break
+    default:
+      status = 'NOT_FOUND'
+      responseCode = 404
+      break
+  }
+
+  res.status(responseCode).send({
+    status: status
+  })
+})
