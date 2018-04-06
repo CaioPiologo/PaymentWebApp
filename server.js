@@ -33,7 +33,7 @@ app.post('/payments/creditCard', (req, res) => {
    //do stuff with it (buy with some api)
 
    //then return any response if needed
-   res.send({card_name: name});
+   res.statusCode(200).send({card_name: name});
 });
 
 app.post('/quotes', (req, res) => {
@@ -47,3 +47,32 @@ app.post('/quotes', (req, res) => {
 })
 
 // app.listen(port, () => console.log(`Listening on port ${port}`));
+/// Return the possible instalments values given the card flag.
+app.post('/payments/creditCards/installments', (req, res) => {
+  var value = parseInt(req.body.value)
+  var flag = req.body.cardFlag
+  var nOfInstalments = 1
+
+  switch (flag) {
+    case 'MASTER_CARD':
+      nOfInstalments = 12
+      break
+    case 'VISA':
+      nOfInstalments = 10
+      break
+    default:
+      nOfInstalments = 6
+      break
+  }
+
+  var installments = {}
+
+  for (let i = 1; i <= nOfInstalments; i++) {
+    installments[i.toString()] = value / i
+  }
+
+  // then return any response if needed
+  res.status(200).send({installments: installments})
+})
+
+app.listen(port, () => console.log(`Listening on port ${port}`));
