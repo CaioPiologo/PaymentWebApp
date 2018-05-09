@@ -6,17 +6,35 @@ const bodyParser = require('body-parser')
 const port = process.env.PORT || 5000
 
 const MongoClient = require('mongodb').MongoClient
+const User = require('./user')
+var mongoose = require('mongoose')
+var session = require('express-session')
+var MongoStore = require('connect-mongo')(session)
 
-var db
-MongoClient.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service',
- (err, client) => {
-   if (err) return console.log(err)
-   db = client.db('mc851_payment_service')
-   app.listen(port, () => console.log(`Listening on port ${port}`))
- })
+mongoose.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service')
+var db = mongoose.connection
+// MongoClient.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service',
+//  (err, client) => {
+//    if (err) return console.log(err)
+//    db = client.db('mc851_payment_service')
+//    app.listen(port, () => console.log(`Listening on port ${port}`))
+//  })
+
+db.on('error', console.error.bind(console, 'connection error:'))
+db.once('open', function () {
+  // we're connected!
+})
 
 /* Uncomment this line to use the server with the react application */
 // app.use(express.static(path.join(__dirname, 'client/build')));
+app.use(session({
+  secret: 'work hard',
+  resave: true,
+  saveUninitialized: false,
+  store: new MongoStore({
+    mongooseConnection: db
+  })
+}))
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
 
@@ -204,4 +222,154 @@ app.post('/invoice', (req, res) => {
     errorMessage: errorMessage,
     documentRep: ''
   })
+})
+
+app.post('/signup', function (req, res) {
+  var body = req.body
+  var responseCode = 200
+  var errorMessage = null
+
+  console.log(body)
+
+  if (body.email && body.password && body.name && body.cpf && body.phone1) {
+    var userData = {
+      email: body.email,
+      password: body.password
+    }
+
+    User.create(userData, function (error, user, next) {
+      if (error) {
+        console.log(error)
+        if (error.code === 11000) {
+          res.status(422).send({
+            error: 'Email already registered.'
+          })
+        } else {
+          res.status(error.code || 404).send({
+            error: error
+          })
+        }
+
+        return
+      }
+
+      var finalUserData = userData
+
+      finalUserData.cpf = body.cpf
+      finalUserData.phone1 = body.phone1
+      if (body.phone2) finalUserData.phone2 = body.phone2
+      if (body.cep) finalUserData.cep = body.cep
+      if (body.sex) finalUserData.sex = body.sex
+      if (body.birthday) finalUserData = body.birthday
+
+      // TODO: send data to the Client 2 API and get the clientID
+      // TODO: Set the client id from the db and the session id like the following line as:
+      // !!! REMEMBER TO UPDATE THE /profile AND /login ENDPOINTS TO USE req.session.userID
+      // User.update({email: body.email}, { clientID: clientID }, function (err, user) {
+      //   if (err) {
+      //     res.status(err.code || 404).send({
+      //       error: err
+      //     })
+      //     return
+      //   }
+
+      //   req.session.userID = clientID
+      //   res.redirect('/profile')
+      // })
+
+      req.session.userEmail = body.email
+      res.redirect('/profile')
+    })
+  } else {
+    responseCode = 400
+
+    if (!body.password) {
+      errorMessage = 'Missing password'
+    } else if (!body.email) {
+      errorMessage = 'Missing email.'
+    } else {
+      errorMessage = 'Missing other mandatory field.'
+    }
+
+    res.status(responseCode).send({
+      errorMessage: errorMessage
+    })
+  }
+})
+
+app.post('/login', function (req, res) {
+  var body = req.body
+  var responseCode = 200
+  var errorMessage = null
+
+  if (body.email && body.password) {
+    User.authenticate(body.email, body.password, function (err, user) {
+      if (err || !user) {
+        errorMessage = 'Wrong email or password'
+        responseCode = 401
+      }
+
+      // req.session.userID = user.clientID
+      // TODO: Delete the following line when working with the Client 2 API
+      req.session.userEmail = body.email
+      res.redirect('/profile')
+    })
+  } else {
+    if (!body.password) {
+      responseCode = 400
+      errorMessage = 'Missing password'
+    } else if (!body.email) {
+      responseCode = 400
+      errorMessage = 'Missing email.'
+    }
+
+    res.status(responseCode).send({
+      errorMessage: errorMessage
+    })
+  }
+})
+
+app.get('/profile', function (req, res) {
+  // var clientID = req.session.userID
+  // TODO: Use the clientID to get the user from the Client 2 API
+
+  User.findOne({email: req.session.userEmail})
+    .exec(function (err, user) {
+      if (err) {
+        res.status(err.code || 404).send({
+          error: err
+        })
+        return
+      }
+
+      if (user === null) {
+        var error = new Error('Not authorized! Go back!')
+        error.status = 400
+
+        res.status(error.code || 404).send({
+          error: error
+        })
+      } else {
+        res.status(200).send(user)
+      }
+    })
+})
+
+app.get('/logout', function (req, res) {
+  if (req.session) {
+    // delete session object
+    req.session.destroy(function (err) {
+      if (err) {
+        res.status(err.code || 404).send({
+          error: err
+        })
+      } else {
+        res.status(200).send('OK')
+      }
+    })
+  }
+})
+
+app.listen(port, function () {
+  console.log('Listening on port ' + port)
 })
