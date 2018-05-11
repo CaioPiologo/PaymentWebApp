@@ -11,22 +11,23 @@ var mongoose = require('mongoose')
 var session = require('express-session')
 var MongoStore = require('connect-mongo')(session)
 
+const axios = require('axios')
+var client2API = axios.create({
+  baseURL: 'https://gentle-waters-56547.herokuapp.com/api',
+  headers: {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+  }
+})
+
 mongoose.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service')
 var db = mongoose.connection
-// MongoClient.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service',
-//  (err, client) => {
-//    if (err) return console.log(err)
-//    db = client.db('mc851_payment_service')
-//    app.listen(port, () => console.log(`Listening on port ${port}`))
-//  })
 
 db.on('error', console.error.bind(console, 'connection error:'))
 db.once('open', function () {
   // we're connected!
 })
 
-/* Uncomment this line to use the server with the react application */
-// app.use(express.static(path.join(__dirname, 'client/build')));
 app.use(session({
   secret: 'work hard',
   resave: true,
@@ -229,13 +230,15 @@ app.post('/signup', function (req, res) {
   var responseCode = 200
   var errorMessage = null
 
-  console.log(body)
+  console.log('/signup')
 
   if (body.email && body.password && body.name && body.cpf && body.phone1) {
     var userData = {
       email: body.email,
       password: body.password
     }
+
+    const email = body.email
 
     User.create(userData, function (error, user, next) {
       if (error) {
@@ -253,8 +256,11 @@ app.post('/signup', function (req, res) {
         return
       }
 
-      var finalUserData = userData
+      var finalUserData = {}
 
+      finalUserData.name = body.name
+      finalUserData.email = body.email
+      finalUserData.password = body.password
       finalUserData.cpf = body.cpf
       finalUserData.phone1 = body.phone1
       if (body.phone2) finalUserData.phone2 = body.phone2
@@ -262,23 +268,52 @@ app.post('/signup', function (req, res) {
       if (body.sex) finalUserData.sex = body.sex
       if (body.birthday) finalUserData = body.birthday
 
-      // TODO: send data to the Client 2 API and get the clientID
-      // TODO: Set the client id from the db and the session id like the following line as:
-      // !!! REMEMBER TO UPDATE THE /profile AND /login ENDPOINTS TO USE req.session.userID
-      // User.update({email: body.email}, { clientID: clientID }, function (err, user) {
-      //   if (err) {
-      //     res.status(err.code || 404).send({
-      //       error: err
-      //     })
-      //     return
-      //   }
+      console.log(finalUserData)
 
-      //   req.session.userID = clientID
-      //   res.redirect('/profile')
-      // })
+      client2API.post('/client', finalUserData)
+        .then(function (response) {
+          console.log(response.data)
 
-      req.session.userEmail = body.email
-      res.redirect('/profile')
+          if (response.data.hasOwnProperty('Client ID')) {
+            const clientID = response.data['Client ID']
+            console.log(clientID)
+
+            User.findOneAndUpdate({email: email}, { clientID: clientID }, function (err, user) {
+              if (err) {
+                console.log('user not found...')
+                res.status(err.code || 404).send({
+                  error: err
+                })
+                return
+              }
+
+              console.log('User updated')
+              
+              req.session.userID = clientID
+              res.redirect('/profile')
+            })
+          } else {
+            console.log('No client id.')
+            res.status(500).send({
+              error: 'Internal error.'
+            })
+          }
+        })
+        .catch(function (err) {
+          if (err.code === 11000) {
+            res.status(422).send({
+              error: 'Email already registered.'
+            })
+          } else {
+            console.log(err.response.data)
+            res.status(err.code || 404).send({
+              error: err.response.data
+            })
+          }
+        })
+
+      // req.session.userEmail = body.email
+      // res.redirect('/profile')
     })
   } else {
     responseCode = 400
@@ -302,17 +337,22 @@ app.post('/login', function (req, res) {
   var responseCode = 200
   var errorMessage = null
 
+  console.log('/login')
+
   if (body.email && body.password) {
     User.authenticate(body.email, body.password, function (err, user) {
       if (err || !user) {
         errorMessage = 'Wrong email or password'
         responseCode = 401
-      }
 
-      // req.session.userID = user.clientID
-      // TODO: Delete the following line when working with the Client 2 API
-      req.session.userEmail = body.email
-      res.redirect('/profile')
+        res.status(responseCode).send({
+          errorMessage: errorMessage
+        })
+      } else {
+        console.log(user)
+        req.session.clientID = user.clientID
+        res.redirect('/profile')
+      }
     })
   } else {
     if (!body.password) {
@@ -330,29 +370,106 @@ app.post('/login', function (req, res) {
 })
 
 app.get('/profile', function (req, res) {
-  // var clientID = req.session.userID
-  // TODO: Use the clientID to get the user from the Client 2 API
+  console.log('/profile')
+  var error = new Error('Not authorized! Please, login first!')
+  error.status = 400
 
-  User.findOne({email: req.session.userEmail})
-    .exec(function (err, user) {
+  if (!req.session) {
+    console.log('No session')
+    res.status(error.status).send({
+      error: error.message
+    })
+
+    return
+  } else if (!req.session.clientID) {
+    console.log('No client id')
+    res.status(error.status).send({
+      error: error.message
+    })
+
+    return
+  }
+
+  client2API.get('/client?clientid=' + req.session.clientID)
+    .then(function (response) {
+      console.log(response.data)
+      if (response.data.data && response.data.data.length > 0) {
+        const usrData = response.data.data[0]
+
+        console.log(usrData)
+
+        res.status(200).send(usrData)
+      } else {
+        res.status(404).send({
+          error: 'User not found.'
+        })
+      }
+    })
+    .catch(function (err) {
+      console.log('Not possible to fetch user.')
+      res.status(err.code || 404).send({
+        error: err.data
+      })
+    })
+})
+
+app.post('/user', function (req, res) {
+  const userData = req.body.userData
+
+  if (!userData.email) {
+    console.log('Missing email!')
+    res.status(401).send({
+      error: 'Missing email!'
+    })
+  }
+
+  if (userData.clientID) {
+    User.findOneAndUpdate({email: userData.email}, userData, function (err, user) {
       if (err) {
-        res.status(err.code || 404).send({
-          error: err
+        console.log('User not found...')
+        res.status(404).send({
+          error: 'User not found'
         })
         return
       }
 
-      if (user === null) {
-        var error = new Error('Not authorized! Go back!')
-        error.status = 400
-
-        res.status(error.code || 404).send({
-          error: error
-        })
-      } else {
-        res.status(200).send(user)
-      }
+      console.log('User updated!')
+      res.status(200).send(user)
     })
+  }
+})
+
+app.delete('/user/:userID', function (req, res) {
+  const clientID = req.params.userID
+
+  console.log('DELETE user with client id: ' + clientID)
+
+  User.findOneAndRemove({ clientID: clientID }, function (err) {
+    if (err) {
+      res.status(err.code || 404).send({
+        error: err
+      })
+    } else {
+      res.status(200).send('OK')
+    }
+  })
+})
+
+app.delete('/user/:email', function (req, res) {
+  const email = req.params.email
+
+  console.log('DELETE user with email: ' + email)
+
+  User.findOneAndRemove({ email: email }, function (err, result) {
+    console.log(err, result)
+    if (err) {
+      res.status(err.code || 404).send({
+        error: err
+      })
+    } else {
+      res.status(200).send('OK')
+    }
+  })
 })
 
 app.get('/logout', function (req, res) {

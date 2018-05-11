@@ -26,14 +26,20 @@ UserSchema.statics.authenticate = function (email, password, callback) {
       if (!user) {
         var error = new Error('User not found!')
         error.status = 401
-        return callback(error)
+        callback(error)
+
+        return
       }
+
+      console.log(user)
 
       bcrypt.compare(password, user.password, function (err, result) {
         if (result === true) {
-          return callback(null, true)
+          console.log('User OK')
+          callback(null, user)
         } else {
-          return callback(err)
+          console.log('Wrong password')
+          callback(err)
         }
       })
     })
