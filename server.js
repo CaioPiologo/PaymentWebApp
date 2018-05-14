@@ -231,6 +231,7 @@ app.post('/signup', function (req, res) {
   var errorMessage = null
 
   console.log('/signup')
+  console.log(body)
 
   if (body.email && body.password && body.name && body.cpf && body.phone1) {
     var userData = {
@@ -266,7 +267,7 @@ app.post('/signup', function (req, res) {
       if (body.phone2) finalUserData.phone2 = body.phone2
       if (body.cep) finalUserData.cep = body.cep
       if (body.sex) finalUserData.sex = body.sex
-      if (body.birthday) finalUserData = body.birthday
+      if (body.birthday) finalUserData.birthday = body.birthday
 
       console.log(finalUserData)
 
@@ -288,6 +289,7 @@ app.post('/signup', function (req, res) {
               }
 
               console.log('User updated')
+              console.log(clientID)
               
               req.session.userID = clientID
               res.redirect('/profile')
@@ -325,7 +327,7 @@ app.post('/signup', function (req, res) {
     } else {
       errorMessage = 'Missing other mandatory field.'
     }
-
+    console.log(errorMessage)
     res.status(responseCode).send({
       errorMessage: errorMessage
     })

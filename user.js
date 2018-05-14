@@ -25,7 +25,7 @@ UserSchema.statics.authenticate = function (email, password, callback) {
 
       if (!user) {
         var error = new Error('User not found!')
-        error.status = 401
+        error.status = 404
         callback(error)
 
         return
