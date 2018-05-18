@@ -7,6 +7,7 @@ const port = process.env.PORT || 5000
 
 const MongoClient = require('mongodb').MongoClient
 const User = require('./user')
+const BankTicket = require('./bankTicket')
 var mongoose = require('mongoose')
 var session = require('express-session')
 var MongoStore = require('connect-mongo')(session)
@@ -19,6 +20,8 @@ var client2API = axios.create({
     'Access-Control-Allow-Origin': '*'
   }
 })
+
+const creditService = require('./creditServices')
 
 mongoose.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service')
 var db = mongoose.connection
@@ -58,40 +61,56 @@ app.post('/payments/creditCard', (req, res) => {
   var clientInfo = req.body
   console.log(clientInfo)
 
-  var result = 'AUTHORIZED'
-  var errorMessage = null
-  var opHash = null
-  var responseCode = 200
+  if (clientInfo.hasOwnProperty('clientCardName') &&
+      clientInfo.hasOwnProperty('cpf') &&
+      clientInfo.hasOwnProperty('cardNumber') &&
+      clientInfo.hasOwnProperty('month') &&
+      clientInfo.hasOwnProperty('year') &&
+      clientInfo.hasOwnProperty('securityCode') &&
+      clientInfo.hasOwnProperty('value') &&
+      clientInfo.hasOwnProperty('instalments')) {
+    var response = {}
+    var responseCode = 200
 
-  if (!clientInfo.hasOwnProperty('clientCardName') ||
-      !clientInfo.hasOwnProperty('cpf') ||
-      !clientInfo.hasOwnProperty('cardNumber') ||
-      !clientInfo.hasOwnProperty('month') ||
-      !clientInfo.hasOwnProperty('year') ||
-      !clientInfo.hasOwnProperty('securityCode') ||
-      !clientInfo.hasOwnProperty('value') ||
-      !clientInfo.hasOwnProperty('instalments')) {
-    result = 'UNAUTHORIZED'
-    responseCode = 400
-    errorMessage = 'Missing information.'
-  } else if (clientInfo.cpf.toString().length !== 11) {
-    result = 'UNAUTHORIZED'
-    responseCode = 400
-    errorMessage = 'Wrong CPF.'
-  } else if (clientInfo.cardNumber.toString().length !== 16) {
-    result = 'UNAUTHORIZED'
-    responseCode = 400
-    errorMessage = 'Wrong card number.'
+    if (clientInfo.cpf.toString().length !== 11) {
+      response.result = 'UNAUTHORIZED'
+      responseCode = 400
+      response.errorMessage = 'Wrong CPF.'
+    } else if (clientInfo.cardNumber.toString().length !== 16) {
+      response.result = 'UNAUTHORIZED'
+      responseCode = 400
+      response.errorMessage = 'Wrong card number.'
+    } else {
+      creditService.isCPFAuth(clientInfo.cpf, function (err, isAuth) {
+        if (err) {
+          responseCode = 400
+          response.errorMessage = err
+        } else if (isAuth === null) {
+          responseCode = 500
+          response.errorMessage = 'Internal server error.'
+        } else {
+          if (isAuth) {
+            response.result = 'AUTHORIZED'
+            response.opHash = Math.random().toString(36).substring(2)
+          } else {
+            response.result = 'UNAUTHORIZED'
+            response.detail = 'Low credit score.'
+          }
+        }
+
+        res.status(responseCode).send(response)
+      })
+      return
+    }
+
+    res.status(400).send(response)
   } else {
-    opHash = Math.random().toString(36).substring(2)
+    // then return any response if needed
+    res.status(400).send({
+      result: 'UNAUTHORIZED',
+      errorMessage: 'Missing information.'
+    })
   }
-
-  // then return any response if needed
-  res.status(responseCode).send({
-    operationHash: opHash,
-    result: result,
-    errorMessage: errorMessage
-  })
 })
 
 /// Return the possible instalments values given the card flag.
@@ -127,7 +146,6 @@ app.post('/payments/bankTicket', (req, res) => {
   var clientInfo = req.body
   console.log(clientInfo)
 
-  var code = null
   var errorMessage = null
   var responseCode = 200
 
@@ -145,47 +163,118 @@ app.post('/payments/bankTicket', (req, res) => {
     responseCode = 400
     errorMessage = 'Wrong CEP.'
   } else {
-    code = Math.random().toString(36).substring(2)
+    creditService.isCPFAuth(clientInfo.cpf, function (err, isAuth) {
+      console.log(isAuth)
+
+      var response = {}
+
+      if (err) {
+        responseCode = 400
+        response.errorMessage = err
+        res.status(responseCode).send(response)
+      } else if (isAuth === null) {
+        responseCode = 500
+        response.errorMessage = 'Internal server error.'
+        res.status(responseCode).send(response)
+      } else {
+        if (isAuth) {
+          const bankTicketData = {
+            cpf: clientInfo.cpf,
+            status: 3
+          }
+
+          BankTicket.create(bankTicketData, function (error, bankTicket, next) {
+            if (error) {
+              console.log(error)
+              responseCode = 500
+              response.errorMessage = 'Internal server error.'
+            } else {
+              response.docRep = Math.random().toString(36).substring(2)
+              response.code = bankTicket._id
+              response.result = 'AUTHORIZED'
+
+              setTimeout(() => {
+                var newStatus = Math.floor(Math.random() * 10)
+
+                if (newStatus <= 8) {
+                  newStatus = 1
+                } else {
+                  newStatus = 2
+                }
+
+                console.log('Updating bank ticket: ' + bankTicket._id)
+                console.log('New status: ' + newStatus)
+
+                BankTicket.findByIdAndUpdate(bankTicket._id, { status: newStatus }, function (err, updatedBankTicket) {
+                  if (err) {
+                    console.log(err)
+                  } else {
+                    console.log(updatedBankTicket)
+                  }
+                })
+              }, 60000)
+            }
+
+            res.status(responseCode).send(response)
+          })
+        } else {
+          response.result = 'UNAUTHORIZED'
+          response.detail = 'Low credit score.'
+          res.status(responseCode).send(response)
+        }
+      }
+    })
+
+    return
   }
 
-  // TODO: Generate document and add it status to the DB
-
   res.status(responseCode).send({
-    code: code,
-    errorMessage: errorMessage,
-    documentRep: ''
+    errorMessage: errorMessage
   })
 })
 
 app.get('/payments/bankTicket/:code/status', (req, res) => {
-  console.log(req.params.code)
+  if (!req.params.code) {
+    res.status(400).send({
+      errorMessage: 'Missing code.'
+    })
 
-  var status = ''
-  var responseCode = 200
-
-  // TODO: Check the status
-  var ticketStatusFromAPI = Math.floor(Math.random() * 4) + 1
-
-  console.log(ticketStatusFromAPI)
-
-  switch (ticketStatusFromAPI) {
-    case 1:
-      status = 'PENDING_PAYMENT'
-      break
-    case 2:
-      status = 'EXPIRED'
-      break
-    case 3:
-      status = 'OK'
-      break
-    default:
-      status = 'NOT_FOUND'
-      responseCode = 404
-      break
+    return
   }
 
-  res.status(responseCode).send({
-    status: status
+  console.log(req.params.code)
+
+  const code = req.params.code
+  var response = {}
+  var responseCode = 200
+
+  BankTicket.findOne({ _id: code }, function (err, bankTicket) {
+    var ticketStatus = 0
+
+    if (err) {
+      console.log(err)
+    } else {
+      console.log(bankTicket)
+      ticketStatus = bankTicket.status
+    }
+
+    switch (ticketStatus) {
+      case 1:
+        response.status = 'OK'
+        break
+      case 2:
+        response.status = 'EXPIRED'
+        break
+      case 3:
+        response.status = 'PENDING_PAYMENT'
+        break
+      default:
+        response.status = 'NOT_FOUND'
+        responseCode = 404
+        break
+    }
+
+    res.status(responseCode).send(response)
   })
 })
 
