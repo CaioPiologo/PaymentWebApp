@@ -8,6 +8,7 @@ const port = process.env.PORT || 5000
 const MongoClient = require('mongodb').MongoClient
 const User = require('./user')
 const BankTicket = require('./bankTicket')
+const CreditCard = require('./creditCard')
 var mongoose = require('mongoose')
 var session = require('express-session')
 var MongoStore = require('connect-mongo')(session)
@@ -42,16 +43,83 @@ app.use(session({
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({extended: true}))
 
-app.get('/api/hello', (req, res) => {
-  res.send({ express: 'Hello World' })
+app.post('/creditCard', function (req, res) {
+  var cardInfo = req.body
+  var response = {}
+  var responseCode = 200
+
+  if (cardInfo.number && (cardInfo.hasCredit != null)) {
+    if (cardInfo.number.toString().length === 16) {
+      CreditCard.create(cardInfo, function (err, creditCard) {
+        if (err) {
+          if (err.code === 11000) {
+            response.errorMessage = 'Number already exists.'
+            responseCode = 422
+          }
+        } else {
+          response.creditCard = {
+            number: creditCard.number,
+            hasCredit: creditCard.hasCredit,
+            id: creditCard._id
+          }
+        }
+
+        res.status(responseCode).send(response)
+      })
+
+      return
+    } else {
+      responseCode = 400
+      response.errorMessage = 'Incorrect card number.'
+    }
+  } else {
+    responseCode = 400
+    response.errorMessage = 'Missing information.'
+  }
+  
+  res.status(responseCode).send(response)
 })
 
-app.post('/quotes', (req, res) => {
-  db.collection('quotes').save(req.body, (err, result) => {
-    if (err) return console.log(err)
+app.get('/creditCard/', function (req, res) {
+  var responseCode = 200
+  var response = {}
 
-    console.log('saved to database')
-    res.redirect('/')
+  CreditCard.find({}, function (err, creditCards) {
+    if (err) {
+      console.log(err)
+      responseCode = 500
+      response.errorMessage = 'Internal server error.'
+    } else {
+      response.creditCards = creditCards.map(function (creditCard) {
+        return {
+          number: creditCard.number,
+          hasCredit: creditCard.hasCredit,
+          id: creditCard._id
+        }
+      })
+    }
+
+    res.status(responseCode).send(response)
+  })
+})
+
+app.get('/creditCard/:number', function (req, res) {
+  var response = {}
+  var responseCode = 200
+  
+  CreditCard.findOne({ number: req.params.number }, function (err, creditCard) {
+    if (err) {
+      responseCode = 404
+      response.errorMessage = 'Credit card with ' + number + ' not found.'
+    } else {
+      response.creditCard = {
+        number: creditCard.number,
+        hasCredit: creditCard.hasCredit,
+        id: creditCard._id
+      }
+    }
+
+    res.status(responseCode).send(response)
   })
 })
 
@@ -73,11 +141,9 @@ app.post('/payments/creditCard', (req, res) => {
     var responseCode = 200
 
     if (clientInfo.cpf.toString().length !== 11) {
-      response.result = 'UNAUTHORIZED'
       responseCode = 400
       response.errorMessage = 'Wrong CPF.'
     } else if (clientInfo.cardNumber.toString().length !== 16) {
-      response.result = 'UNAUTHORIZED'
       responseCode = 400
       response.errorMessage = 'Wrong card number.'
     } else {
@@ -90,8 +156,27 @@ app.post('/payments/creditCard', (req, res) => {
           response.errorMessage = 'Internal server error.'
         } else {
           if (isAuth) {
-            response.result = 'AUTHORIZED'
-            response.opHash = Math.random().toString(36).substring(2)
+            CreditCard.findOne({number: clientInfo.cardNumber}, function (err, creditCard) {
+              if (err) {
+                responseCode = 500
+                response.errorMessage = 'Internal server error.'
+              } else if (!creditCard) {
+                response.result = 'AUTHORIZED'
+                response.opHash = Math.random().toString(36).substring(2)
+                response.detail = 'Credit card not registered.'
+              } else {
+                if (creditCard.hasCredit) {
+                  response.result = 'AUTHORIZED'
+                  response.opHash = Math.random().toString(36).substring(2)
+                } else {
+                  response.result = 'UNAUTHORIZED'
+                  response.detail = 'No credit.'
+                }
+              }
+
+              res.status(responseCode).send(response)
+            })
+            return
           } else {
             response.result = 'UNAUTHORIZED'
             response.detail = 'Low credit score.'
@@ -107,7 +192,6 @@ app.post('/payments/creditCard', (req, res) => {
   } else {
     // then return any response if needed
     res.status(400).send({
-      result: 'UNAUTHORIZED',
       errorMessage: 'Missing information.'
     })
   }

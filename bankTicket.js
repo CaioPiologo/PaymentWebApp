@@ -1,6 +1,6 @@
 var mongoose = require('mongoose')
 
-var UserSchema = new mongoose.Schema({
+var BankTicketSchema = new mongoose.Schema({
   cpf: {
     type: String,
     required: true
@@ -11,5 +11,5 @@ var UserSchema = new mongoose.Schema({
   }
 })
 
-var BankTicket = mongoose.model('BankTicket', UserSchema)
+var BankTicket = mongoose.model('BankTicket', BankTicketSchema)
 module.exports = BankTicket
