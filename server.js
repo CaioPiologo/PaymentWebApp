@@ -6,23 +6,16 @@ const bodyParser = require('body-parser')
 const port = process.env.PORT || 5000
 
 const MongoClient = require('mongodb').MongoClient
-const User = require('./user')
-const BankTicket = require('./bankTicket')
-const CreditCard = require('./creditCard')
+const User = require('./model/user')
+const BankTicket = require('./model/bankTicket')
+const CreditCard = require('./model/creditCard')
+const Purchase = require('./model/purchase')
 var mongoose = require('mongoose')
 var session = require('express-session')
 var MongoStore = require('connect-mongo')(session)
 
-const axios = require('axios')
-var client2API = axios.create({
-  baseURL: 'https://gentle-waters-56547.herokuapp.com/api',
-  headers: {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  }
-})
-
-const creditService = require('./creditServices')
+const creditService = require('./services/creditServices')
+const clientService = require('./services/clientServices')
 
 mongoose.connect('mongodb://mc851_payment:mc8512018@ds143362.mlab.com:43362/mc851_payment_service')
 var db = mongoose.connection
@@ -110,7 +103,7 @@ app.get('/creditCard/:number', function (req, res) {
   CreditCard.findOne({ number: req.params.number }, function (err, creditCard) {
     if (err) {
       responseCode = 404
-      response.errorMessage = 'Credit card with ' + number + ' not found.'
+      response.errorMessage = 'Credit card with ' + req.params.number + ' not found.'
     } else {
       response.creditCard = {
         number: creditCard.number,
@@ -289,7 +282,7 @@ app.post('/payments/bankTicket', (req, res) => {
                 console.log('Updating bank ticket: ' + bankTicket._id)
                 console.log('New status: ' + newStatus)
 
-                BankTicket.findByIdAndUpdate(bankTicket._id, { status: newStatus }, function (err, updatedBankTicket) {
+                BankTicket.findByIdAndUpdate(bankTicket._id, { status: newStatus }, { new: true }, function (err, updatedBankTicket) {
                   if (err) {
                     console.log(err)
                   } else {
@@ -332,6 +325,8 @@ app.get('/payments/bankTicket/:code/status', (req, res) => {
   var response = {}
   var responseCode = 200
 
+  response.code = code
+
   BankTicket.findOne({ _id: code }, function (err, bankTicket) {
     var ticketStatus = 0
 
@@ -366,36 +361,31 @@ app.post('/invoice', (req, res) => {
   var body = req.body
   console.log(body)
 
-  var code = null
-  var errorMessage = null
+  var response = {}
   var responseCode = 200
 
   if (!body.hasOwnProperty('clientData') ||
       !body.hasOwnProperty('products') ||
-      !body.hasOwnProperty('paymentMethod') ||
       !body.hasOwnProperty('value') ||
       !body.hasOwnProperty('transportValue') ||
       !body.hasOwnProperty('discountValue') ||
       !body.hasOwnProperty('totalValue')) {
     responseCode = 400
-    errorMessage = 'Missing information.'
+    response.errorMessage = 'Missing information.'
   } else if (body.clientData.cpf.toString().length !== 11) {
     responseCode = 400
-    errorMessage = 'Wrong CPF.'
+    response.errorMessage = 'Wrong CPF.'
   } else if (body.clientData.address.cep.toString().length !== 8) {
     responseCode = 400
-    errorMessage = 'Wrong CEP.'
+    response.errorMessage = 'Wrong CEP.'
   } else {
-    code = Math.random().toString(36).substring(2)
+    response.code = Math.random().toString(36).substring(2)
+    response.documentRep = ''
   }
 
   // TODO: Generate invoice document
 
-  res.status(responseCode).send({
-    invoiceCode: code,
-    errorMessage: errorMessage,
-    documentRep: ''
-  })
+  res.status(responseCode).send(response)
 })
 
 app.post('/signup', function (req, res) {
@@ -407,88 +397,13 @@ app.post('/signup', function (req, res) {
   console.log(body)
 
   if (body.email && body.password && body.name && body.cpf && body.phone1) {
-    var userData = {
-      email: body.email,
-      password: body.password
-    }
-
-    const email = body.email
-
-    User.create(userData, function (error, user, next) {
-      if (error) {
-        console.log(error)
-        if (error.code === 11000) {
-          res.status(422).send({
-            error: 'Email already registered.'
-          })
-        } else {
-          res.status(error.code || 404).send({
-            error: error
-          })
-        }
-
-        return
+    clientService.insertUser(body, function (err, user) {
+      if (err) {
+        res.status(err.code).send(err.error)
+      } else {
+        req.session.clientID = user.clientID
+        res.redirect('/profile')
       }
-
-      var finalUserData = {}
-
-      finalUserData.name = body.name
-      finalUserData.email = body.email
-      finalUserData.password = body.password
-      finalUserData.cpf = body.cpf
-      finalUserData.phone1 = body.phone1
-      if (body.phone2) finalUserData.phone2 = body.phone2
-      if (body.cep) finalUserData.cep = body.cep
-      if (body.sex) finalUserData.sex = body.sex
-      if (body.birthday) finalUserData.birthday = body.birthday
-
-      console.log(finalUserData)
-
-      client2API.post('/client', finalUserData)
-        .then(function (response) {
-          console.log(response.data)
-
-          if (response.data.hasOwnProperty('Client ID')) {
-            const clientID = response.data['Client ID']
-            console.log(clientID)
-
-            User.findOneAndUpdate({email: email}, { clientID: clientID }, function (err, user) {
-              if (err) {
-                console.log('user not found...')
-                res.status(err.code || 404).send({
-                  error: err
-                })
-                return
-              }
-
-              console.log('User updated')
-              console.log(clientID)
-              
-              req.session.userID = clientID
-              res.redirect('/profile')
-            })
-          } else {
-            console.log('No client id.')
-            res.status(500).send({
-              error: 'Internal error.'
-            })
-          }
-        })
-        .catch(function (err) {
-          if (err.code === 11000) {
-            res.status(422).send({
-              error: 'Email already registered.'
-            })
-          } else {
-            console.log(err.response.data)
-            res.status(err.code || 404).send({
-              error: err.response.data
-            })
-          }
-        })
-
-      // req.session.userEmail = body.email
-      // res.redirect('/profile')
     })
   } else {
     responseCode = 400
@@ -565,31 +480,49 @@ app.get('/profile', function (req, res) {
     return
   }
 
-  client2API.get('/client?clientid=' + req.session.clientID)
-    .then(function (response) {
-      console.log(response.data)
-      if (response.data.data && response.data.data.length > 0) {
-        const usrData = response.data.data[0]
-
-        console.log(usrData)
-
-        res.status(200).send(usrData)
-      } else {
-        res.status(404).send({
-          error: 'User not found.'
-        })
-      }
-    })
-    .catch(function (err) {
-      console.log('Not possible to fetch user.')
-      res.status(err.code || 404).send({
-        error: err.data
-      })
-    })
+  clientService.getUser(req.session.clientID, function (err, user) {
+    if (err) {
+      res.status(err.code).send(err.error)
+    } else {
+      res.status(200).send(user)
+    }
+  })
 })
 
 app.post('/user', function (req, res) {
-  const userData = req.body.userData
+  const userData = req.body
+
+  console.log(userData)
+
+  var responseCode = 200
+  var response = {}
+
+  if (userData.email && userData.clientID && userData.password) {
+    User.create(userData, function (err, user) {
+      if (err) {
+        if (err.code === 11000) {
+          response.errorMessage = 'Email already registered'
+          responseCode = 422
+        } else {
+          responseCode = err.code || 404
+          response.errorMessage = err
+        }
+
+        res.status(responseCode).send(response)
+      } else {
+        res.status(responseCode).send(user)
+      }
+    })
+  } else {
+    responseCode = 400
+    response.errorMessage = 'Missing parameter.'
+
+    res.status(responseCode).send(response)
+  }
+})
+
+app.put('/user', function (req, res) {
+  const userData = req.body
 
   if (!userData.email) {
     console.log('Missing email!')
@@ -598,8 +531,10 @@ app.post('/user', function (req, res) {
     })
   }
 
-  if (userData.clientID) {
-    User.findOneAndUpdate({email: userData.email}, userData, function (err, user) {
+  User.findOneAndUpdate({ email: userData.email },
+    userData,
+    { new: true },
+    function (err, user) {
       if (err) {
         console.log('User not found...')
         res.status(404).send({
@@ -611,6 +546,65 @@ app.post('/user', function (req, res) {
       console.log('User updated!')
       res.status(200).send(user)
     })
+})
+
+app.post('/user/:clientID/purchase', function (req, res) {
+  const clientID = req.params.clientID
+  const body = req.body
+
+  var responseCode = 200
+  var response = {}
+
+  if (body.trackingNumber && body.products) {
+    const badFormatedProd = body.products.find(function (prod) { return !prod.productID || !prod.amount })
+    console.log(badFormatedProd)
+
+    if (badFormatedProd) {
+      responseCode = 400
+      response.errorMessage = 'Missing parameter for product.'
+
+      res.status(responseCode).send(response)
+      return
+    }
+
+    const newPurchase = {
+      clientID: clientID,
+      trackingNumber: body.trackingNumber,
+      products: body.products
+    }
+
+    Purchase.create(newPurchase, function (err, purchase) {
+      if (err) {
+        if (err.code === 11000) {
+          response.errorMessage = 'Purchase already registered'
+          responseCode = 422
+        } else {
+          responseCode = err.code || 404
+          response.errorMessage = err
+        }
+
+        res.status(responseCode).send(response)
+      } else {
+        User.findOneAndUpdate({ clientID: clientID }, 
+          { $push: { purchases: purchase._id } },
+          { new: true },
+          function (err, user) {
+            if (err) {
+              responseCode = err.code || 404
+              response.errorMessage = err
+            } else {
+              response = user
+            }
+
+            res.status(responseCode).send(response)
+          })
+      }
+    })
+  } else {
+    responseCode = 400
+    response.errorMessage = 'Missing parameter.'
+
+    res.status(responseCode).send(response)
   }
 })
 
@@ -637,13 +631,36 @@ app.delete('/user/:email', function (req, res) {
 
   User.findOneAndRemove({ email: email }, function (err, result) {
     console.log(err, result)
-    if (err) {
-      res.status(err.code || 404).send({
-        error: err
+    if (err || !result) {
+      res.status(404).send({
+        errorMessage: 'Not found'
       })
     } else {
       res.status(200).send('OK')
     }
+  })
+})
+
+app.get('/user', function (req, res) {
+  var responseCode = 200
+  var response = {}
+
+  User.find({}, function (err, users) {
+    if (err) {
+      console.log(err)
+      responseCode = 500
+      response.errorMessage = 'Internal server error.'
+    } else {
+      response.users = users.map(function (user) {
+        return {
+          email: user.email,
+          clientID: user.clientID,
+          purchases: user.purchases
+        }
+      })
+    }
+
+    res.status(responseCode).send(response)
   })
 })
 
@@ -660,6 +677,36 @@ app.get('/logout', function (req, res) {
       }
     })
   }
+})
+
+app.get('/purchase/:id', function (req, res) {
+  const id = req.params.id
+
+  Purchase.findById(id, function (err, purchase) {
+    if (err || !purchase) {
+      res.status(404).send({
+        error: 'Not found.'
+      })
+    } else {
+      res.status(200).send({
+        products: purchase.products,
+        trackingNumber: purchase.trackingNumber,
+        clientID: purchase.clientID,
+        id: purchase._id
+      })
+    }
+  })
+})
+
+app.delete('/purchase/:id', function (req, res) {
+  Purchase.findByIdAndRemove(req.params.id, function (err, result) {
+    console.log(err, result)
+    if (err) {
+      res.status(500).send({ errorMessage: 'Internal server error.' })
+    } else {
+      res.status(200).send('OK')
+    }
+  })
 })
 
 app.listen(port, function () {
