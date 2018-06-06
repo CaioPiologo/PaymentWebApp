@@ -484,6 +484,7 @@ app.get('/profile', function (req, res) {
     if (err) {
       res.status(err.code).send(err.error)
     } else {
+      user.clientID = req.session.clientID
       res.status(200).send(user)
     }
   })
@@ -567,10 +568,14 @@ app.post('/user/:clientID/purchase', function (req, res) {
       return
     }
 
-    const newPurchase = {
+    var newPurchase = {
       clientID: clientID,
       trackingNumber: body.trackingNumber,
       products: body.products
+    }
+
+    if (body.bankTicketID) {
+      newPurchase.bankTicketID = body.bankTicketID
     }
 
     Purchase.create(newPurchase, function (err, purchase) {
@@ -688,12 +693,18 @@ app.get('/purchase/:id', function (req, res) {
         error: 'Not found.'
       })
     } else {
-      res.status(200).send({
+      var finalPurchase = {
         products: purchase.products,
         trackingNumber: purchase.trackingNumber,
         clientID: purchase.clientID,
         id: purchase._id
-      })
+      }
+
+      if (purchase.bankTicketID) {
+        finalPurchase.bankTicketID = purchase.bankTicketID
+      }
+
+      res.status(200).send(finalPurchase)
     }
   })
 })
