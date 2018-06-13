@@ -402,6 +402,7 @@ app.post('/signup', function (req, res) {
         res.status(err.code).send(err.error)
       } else {
         req.session.clientID = user.clientID
+        req.session.save()
         res.redirect('/profile')
       }
     })
@@ -441,6 +442,7 @@ app.post('/login', function (req, res) {
       } else {
         console.log(user)
         req.session.clientID = user.clientID
+        req.session.save()
         res.redirect('/profile')
       }
     })
@@ -590,7 +592,7 @@ app.post('/user/:clientID/purchase', function (req, res) {
 
         res.status(responseCode).send(response)
       } else {
-        User.findOneAndUpdate({ clientID: clientID }, 
+        User.findOneAndUpdate({ clientID: clientID },
           { $push: { purchases: purchase._id } },
           { new: true },
           function (err, user) {
