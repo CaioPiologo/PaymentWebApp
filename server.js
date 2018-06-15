@@ -501,7 +501,24 @@ app.get('/profile', function (req, res) {
       res.status(err.code).send(err.error)
     } else {
       user.clientID = req.session.clientID
-      res.status(200).send(user)
+
+      Purchase.find({clientID: req.session.clientID}, function (err, purchases) {
+        if (err) {
+          res.status(500).send({errorMessage: 'Internal server error.'})
+        } else {
+          user.purchases = purchases.map(function (purchase) {
+            return {
+              products: purchase.products,
+              trackingNumber: purchase.trackingNumber,
+              clientID: purchase.clientID,
+              id: purchase._id,
+              totalAmount: purchase.totalAmount
+            }
+          })
+
+          res.status(200).send(user)
+        }
+      })
     }
   })
 })
@@ -631,6 +648,36 @@ app.post('/user/:clientID/purchase', function (req, res) {
 
     res.status(responseCode).send(response)
   }
+})
+
+app.get('/user/:clientID', function (req, res) {
+  const clientID = req.params.clientID
+
+  clientService.getUser(clientID, function (err, user) {
+    if (err) {
+      res.status(err.code).send(err.error)
+    } else {
+      user.clientID = req.session.clientID
+
+      Purchase.find({clientID: clientID}, function (err, purchases) {
+        if (err) {
+          res.status(500).send({errorMessage: 'Internal server error.'})
+        } else {
+          user.purchases = purchases.map(function (purchase) {
+            return {
+              products: purchase.products,
+              trackingNumber: purchase.trackingNumber,
+              clientID: purchase.clientID,
+              id: purchase._id,
+              totalAmount: purchase.totalAmount
+            }
+          })
+
+          res.status(200).send(user)
+        }
+      })
+    }
+  })
 })
 
 app.delete('/user/:userID', function (req, res) {
