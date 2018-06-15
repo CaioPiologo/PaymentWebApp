@@ -403,7 +403,14 @@ app.post('/signup', function (req, res) {
       } else {
         req.session.clientID = user.clientID
         req.session.save()
-        res.redirect('/profile')
+        clientService.getUser(user.clientID, function (err, user) {
+          if (err) {
+            res.status(err.code).send(err.error)
+          } else {
+            user.clientID = req.session.clientID
+            res.status(200).send(user)
+          }
+        })
       }
     })
   } else {
@@ -443,7 +450,14 @@ app.post('/login', function (req, res) {
         console.log(user)
         req.session.clientID = user.clientID
         req.session.save()
-        res.redirect('/profile')
+        clientService.getUser(user.clientID, function (err, user) {
+          if (err) {
+            res.status(err.code).send(err.error)
+          } else {
+            user.clientID = req.session.clientID
+            res.status(200).send(user)
+          }
+        })
       }
     })
   } else {
