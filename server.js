@@ -594,6 +594,10 @@ app.post('/user/:clientID/purchase', function (req, res) {
       newPurchase.bankTicketID = body.bankTicketID
     }
 
+    if (body.totalAmount) {
+      newPurchase.totalAmount = body.totalAmount
+    }
+
     Purchase.create(newPurchase, function (err, purchase) {
       if (err) {
         if (err.code === 11000) {
@@ -713,7 +717,8 @@ app.get('/purchase/:id', function (req, res) {
         products: purchase.products,
         trackingNumber: purchase.trackingNumber,
         clientID: purchase.clientID,
-        id: purchase._id
+        id: purchase._id,
+        totalAmount: purchase.totalAmount
       }
 
       if (purchase.bankTicketID) {

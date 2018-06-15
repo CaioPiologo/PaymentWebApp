@@ -20,6 +20,10 @@ var PurchaseSchema = new mongoose.Schema({
       message: 'Product {VALUE} is missing some parameters'
     }
   },
+  totalAmount: {
+    type: Number,
+    required: false
+  },
   bankTicketID: {
     type: String,
     required: false
