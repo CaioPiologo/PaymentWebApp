@@ -669,7 +669,8 @@ app.get('/user/:clientID', function (req, res) {
               trackingNumber: purchase.trackingNumber,
               clientID: purchase.clientID,
               id: purchase._id,
-              totalAmount: purchase.totalAmount
+              totalAmount: purchase.totalAmount,
+              bankTicketID: purchase.bankTicketID,
             }
           })
 
